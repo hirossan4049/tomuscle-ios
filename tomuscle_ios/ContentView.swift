@@ -63,29 +63,53 @@ struct ContentView: View {
     }
   }
   
-  /// Visionの正規化座標（左下原点）→ 画面座標（左上原点）に変換
+  //  /// Visionの正規化座標（左下原点）→ 画面座標（左上原点）に変換
+  //  private func convert(rect: CGRect, in size: CGSize) -> CGRect {
+  //    // フロントカメラのミラーリングを考慮してX座標を左右反転
+  //    let x = (1 - rect.origin.x - rect.size.width) * size.width
+  //    // Y座標：Visionの左下原点を画面の左上原点に変換
+  //    let y = (-0.35 + rect.origin.y + rect.size.height) * size.height
+  //    let w = rect.size.width * size.width
+  //    let h = rect.size.height * size.height
+  //    print(x,y)
+  //    return CGRect(x: y, y: x, width: w, height: h)
+  //  }
+  //  private func convert(rect: CGRect, in size: CGSize) -> CGRect {
+  //    let W = size.width
+  //    let H = size.height
+  //
+  //    // 正規化座標系 (0..1) の rect を、90°時計回りに回転させてからスケーリング
+  //    let nx = rect.origin.y
+  //    let ny = 1 - rect.origin.x - rect.size.width
+  //    let nw = rect.size.height
+  //    let nh = rect.size.width
+  //
+  //    let x = nx * W
+  //    let y = ny * H
+  //    let w = nw * W
+  //    let h = nh * H
+  //
+  //    return CGRect(x: x, y: y, width: w, height: h)
+  //  }
   private func convert(rect: CGRect, in size: CGSize) -> CGRect {
-    // Vision: origin(0,0)=左下, width/heightは0..1
-    let x = rect.origin.x * size.width
-    let y = (1 - rect.origin.y - rect.size.height) * size.height
-    let w = rect.size.width * size.width
-    let h = rect.size.height * size.height
-    return CGRect(x: x, y: y, width: w, height: h)
+    let W = size.width, H = size.height
+    
+    // 90°時計回りの回転（正規化座標）
+    let rx = rect.origin.y
+    let ry = 1 - rect.origin.x - rect.size.width
+    let rw = rect.size.height
+    let rh = rect.size.width
+    
+    // セルフィープレビューの水平ミラーを補正
+    let mx = 1 - rx - rw
+    
+    return CGRect(x: mx * W, y: ry * H, width: rw * W, height: rh * H)
   }
-//  private func convert(rect: CGRect, in size: CGSize) -> CGRect {
-//      // フロントカメラのミラーリングを考慮
-//      // X座標：左右反転（1 - x - width ではなく 1 - x）
-//      let x = (1 - rect.origin.x - rect.size.width) * size.width
-//      
-//      // Y座標：上下反転（1 - y ではなく、そのまま y を使う）
-//      // Visionの左下原点(y)を、UIKitの左上原点に変換
-//      let y = rect.origin.y * size.height
-//      
-//      let w = rect.size.width * size.width
-//      let h = rect.size.height * size.height
-//      
-//      return CGRect(x: x, y: y, width: w, height: h)
-//  }
+  
+  
+  
+  
+  
 }
 
 // MARK: - Camera Preview (SwiftUI <-> AVCaptureVideoPreviewLayer)
@@ -139,7 +163,7 @@ final class CameraController: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     let discovery = AVCaptureDevice.DiscoverySession(
       deviceTypes: [.builtInWideAngleCamera],
       mediaType: .video,
-      position: .front
+      position: .back
     )
     guard let device = discovery.devices.first,
           let input = try? AVCaptureDeviceInput(device: device),
@@ -175,7 +199,7 @@ final class CameraController: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     
     // 軽負荷のため 15fps相当で間引き（必要に応じて調整）
     let now = CFAbsoluteTimeGetCurrent()
-    if now - lastRequestTime < (1.0 / 15.0) { return }
+    if now - lastRequestTime < (1.0 / 30.0) { return }
     lastRequestTime = now
     
     guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }

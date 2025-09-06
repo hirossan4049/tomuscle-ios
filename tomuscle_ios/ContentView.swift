@@ -8,6 +8,7 @@
 import SwiftUI
 import AVFoundation
 import Vision
+import MultipeerConnectivity
 
 // MARK: - Content
 struct ContentView: View {
@@ -15,25 +16,30 @@ struct ContentView: View {
   @State private var faceRects: [CGRect] = [] // 0..1 正規化座標（VisionのboundingBox）
   @State private var imageScale: Double = 5.0 // 画像のスケール値
   @State private var showScaleControl = true // スケールコントロールの表示/非表示
+  @State private var showConnectionPanel = false // 接続パネルの表示/非表示
   private let camera = CameraController()
-  
+
+  // Multipeer Connectivity (iPhone専用)
+  @StateObject private var multipeerService = iPhoneMultipeerService()
+  @StateObject private var streamCapture = VideoStreamCapture()
+
   // 差し込む画像の名前（Assets.xcassetsに追加してください）
   private let overlayImageName = "overlay_image" // この名前を実際の画像名に変更してください
-  
+
   var body: some View {
     ZStack {
       CameraPreview(session: camera.session)
         .ignoresSafeArea()
-      
+
       // 検出枠に画像をオーバーレイ
       GeometryReader { geo in
         ForEach(faceRects.indices, id: \.self) { idx in
           let rect = convert(rect: faceRects[idx], in: geo.size)
-          
+
           // スケールを適用した画像サイズ
           let scaledWidth = rect.width * imageScale
           let scaledHeight = rect.height * imageScale
-          
+
           // 画像を表示（システムアイコンまたはカスタム画像）
           // カスタム画像を使う場合
           Image(overlayImageName)
@@ -41,7 +47,7 @@ struct ContentView: View {
             .scaledToFit()
             .frame(width: scaledWidth, height: scaledHeight)
             .position(x: rect.midX, y: rect.midY)
-          
+
           // またはシステムアイコンを使う場合（テスト用）
           // Image(systemName: "face.smiling.fill")
           //   .resizable()
@@ -49,7 +55,7 @@ struct ContentView: View {
           //   .foregroundColor(.yellow.opacity(0.7))
           //   .frame(width: scaledWidth, height: scaledHeight)
           //   .position(x: rect.midX, y: rect.midY)
-          
+
           // 枠線も表示したい場合はコメントアウトを解除
           // RoundedRectangle(cornerRadius: 6)
           //   .stroke(Color.blue, lineWidth: 2)
@@ -58,7 +64,7 @@ struct ContentView: View {
         }
       }
       .allowsHitTesting(false)
-      
+
       // スケール調整コントロール
       if showScaleControl {
         VStack {
@@ -69,7 +75,7 @@ struct ContentView: View {
                 .foregroundColor(.white)
                 .font(.caption)
                 .padding(.horizontal)
-              
+
               Button(action: {
                 withAnimation(.easeInOut(duration: 0.2)) {
                   showScaleControl.toggle()
@@ -79,19 +85,19 @@ struct ContentView: View {
                   .foregroundColor(.white.opacity(0.8))
               }
             }
-            
+
             HStack {
               Image(systemName: "minus.magnifyingglass")
                 .foregroundColor(.white.opacity(0.7))
-              
+
               Slider(value: $imageScale, in: 0.5...3.0, step: 0.1)
                 .accentColor(.white)
                 .frame(width: 200)
-              
+
               Image(systemName: "plus.magnifyingglass")
                 .foregroundColor(.white.opacity(0.7))
             }
-            
+
             HStack(spacing: 20) {
               Button("0.5x") { withAnimation { imageScale = 0.5 } }
               Button("1.0x") { withAnimation { imageScale = 1.0 } }
@@ -129,7 +135,119 @@ struct ContentView: View {
           }
         }
       }
-      
+
+      // 接続パネル
+      if showConnectionPanel {
+        VStack {
+          Spacer()
+          VStack(spacing: 15) {
+            HStack {
+              Text("Apple Vision Pro接続")
+                .font(.headline)
+                .foregroundColor(.white)
+
+              Spacer()
+
+              Button(action: {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                  showConnectionPanel.toggle()
+                }
+              }) {
+                Image(systemName: "xmark.circle.fill")
+                  .foregroundColor(.white.opacity(0.8))
+              }
+            }
+
+            VStack(spacing: 10) {
+              Text("接続状態: \(multipeerService.connectionStatus)")
+                .font(.caption)
+                .foregroundColor(.white.opacity(0.9))
+
+              Text("ストリーミング: \(streamCapture.streamingStatus)")
+                .font(.caption)
+                .foregroundColor(.white.opacity(0.9))
+            }
+
+            HStack(spacing: 15) {
+              Button(action: {
+                if multipeerService.isAdvertising {
+                  multipeerService.stopAdvertising()
+                } else {
+                  multipeerService.startAdvertising()
+                }
+              }) {
+                Text(multipeerService.isAdvertising ? "停止" : "待機")
+                  .font(.caption)
+                  .padding(.horizontal, 12)
+                  .padding(.vertical, 6)
+                  .background(multipeerService.isAdvertising ? Color.red : Color.blue)
+                  .foregroundColor(.white)
+                  .cornerRadius(8)
+              }
+
+              Button(action: {
+                if multipeerService.isBrowsing {
+                  multipeerService.stopBrowsing()
+                } else {
+                  multipeerService.startBrowsing()
+                }
+              }) {
+                Text(multipeerService.isBrowsing ? "停止" : "検索")
+                  .font(.caption)
+                  .padding(.horizontal, 12)
+                  .padding(.vertical, 6)
+                  .background(multipeerService.isBrowsing ? Color.red : Color.green)
+                  .foregroundColor(.white)
+                  .cornerRadius(8)
+              }
+
+              Button(action: {
+                if streamCapture.streamingStatus.contains("中") {
+                  streamCapture.stopStreaming()
+                } else {
+                  streamCapture.startStreaming()
+                }
+              }) {
+                Text(streamCapture.streamingStatus.contains("中") ? "停止" : "配信")
+                  .font(.caption)
+                  .padding(.horizontal, 12)
+                  .padding(.vertical, 6)
+                  .background(streamCapture.streamingStatus.contains("中") ? Color.red : Color.orange)
+                  .foregroundColor(.white)
+                  .cornerRadius(8)
+              }
+            }
+          }
+          .padding()
+          .background(Color.black.opacity(0.8))
+          .cornerRadius(15)
+          .padding(.bottom, 30)
+        }
+      } else {
+        // 接続パネル最小化ボタン
+        VStack {
+          HStack {
+            Button(action: {
+              withAnimation(.easeInOut(duration: 0.2)) {
+                showConnectionPanel.toggle()
+              }
+            }) {
+              Image(systemName: "wifi")
+                .font(.title2)
+                .foregroundColor(.white)
+                .padding(12)
+                .background(multipeerService.connectedPeers.isEmpty ? Color.black.opacity(0.7) : Color.green.opacity(0.8))
+                .clipShape(Circle())
+            }
+            .padding(.leading, 20)
+            .padding(.top, 60)
+
+            Spacer()
+          }
+          Spacer()
+        }
+      }
+
       if permissionDenied {
         Color.black.opacity(0.6).ignoresSafeArea()
         VStack(spacing: 8) {
@@ -143,6 +261,10 @@ struct ContentView: View {
       }
     }
     .onAppear {
+      // MultipeerServiceとVideoStreamCaptureの初期化
+      streamCapture.setMultipeerService(multipeerService)
+      streamCapture.setCameraController(camera)
+
       AVCaptureDevice.requestAccess(for: .video) { granted in
         DispatchQueue.main.async {
           permissionDenied = !granted
@@ -151,6 +273,7 @@ struct ContentView: View {
               // UI更新はメインで
               self.faceRects = rects
             }
+            camera.setStreamCapture(streamCapture)
             camera.start()
           }
         }
@@ -158,21 +281,24 @@ struct ContentView: View {
     }
     .onDisappear {
       camera.stop()
+      multipeerService.stopAdvertising()
+      multipeerService.stopBrowsing()
+      streamCapture.stopStreaming()
     }
   }
-  
+
   private func convert(rect: CGRect, in size: CGSize) -> CGRect {
     let W = size.width, H = size.height
-    
+
     // 90°時計回りの回転（正規化座標）
     let rx = rect.origin.y
     let ry = 1 - rect.origin.x - rect.size.width
     let rw = rect.size.height
     let rh = rect.size.width
-    
+
     // セルフィープレビューの水平ミラーを補正
     let mx = 1 - rx - rw
-    
+
     return CGRect(x: mx * W, y: ry * H, width: rw * W, height: rh * H)
   }
 }
@@ -180,16 +306,16 @@ struct ContentView: View {
 // MARK: - Camera Preview (SwiftUI <-> AVCaptureVideoPreviewLayer)
 struct CameraPreview: UIViewRepresentable {
   let session: AVCaptureSession
-  
+
   func makeUIView(context: Context) -> PreviewView {
     let v = PreviewView()
     v.videoPreviewLayer.session = session
     v.videoPreviewLayer.videoGravity = .resizeAspectFill
     return v
   }
-  
+
   func updateUIView(_ uiView: PreviewView, context: Context) {}
-  
+
   final class PreviewView: UIView {
     override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
     var videoPreviewLayer: AVCaptureVideoPreviewLayer { layer as! AVCaptureVideoPreviewLayer }
@@ -203,8 +329,14 @@ final class CameraController: NSObject, AVCaptureVideoDataOutputSampleBufferDele
   private let videoOutput = AVCaptureVideoDataOutput()
   private var device: AVCaptureDevice?
   private var lastRequestTime = CFAbsoluteTimeGetCurrent()
+  private var currentPixelBuffer: CVPixelBuffer?
+  private var streamCapture: VideoStreamCapture?
   var onFacesDetected: (([CGRect]) -> Void)?
-  
+
+  func setStreamCapture(_ capture: VideoStreamCapture) {
+    self.streamCapture = capture
+  }
+
   func start() {
     if session.inputs.isEmpty {
       setupSession()
@@ -213,17 +345,17 @@ final class CameraController: NSObject, AVCaptureVideoDataOutputSampleBufferDele
       self?.session.startRunning()
     }
   }
-  
+
   func stop() {
     queue.async { [weak self] in
       self?.session.stopRunning()
     }
   }
-  
+
   private func setupSession() {
     session.beginConfiguration()
     session.sessionPreset = .high
-    
+
     // Back camera (背面カメラ)
     let discovery = AVCaptureDevice.DiscoverySession(
       deviceTypes: [.builtInWideAngleCamera],
@@ -238,7 +370,7 @@ final class CameraController: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     }
     session.addInput(input)
     self.device = device
-    
+
     // Output
     videoOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)]
     videoOutput.alwaysDiscardsLateVideoFrames = true
@@ -248,27 +380,32 @@ final class CameraController: NSObject, AVCaptureVideoDataOutputSampleBufferDele
       return
     }
     session.addOutput(videoOutput)
-    
+
     // 縦向き固定
     if let conn = videoOutput.connection(with: .video), conn.isVideoOrientationSupported {
       conn.videoOrientation = .portrait
     }
-    
+
     session.commitConfiguration()
   }
-  
+
   // MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
   func captureOutput(_ output: AVCaptureOutput,
                      didOutput sampleBuffer: CMSampleBuffer,
                      from connection: AVCaptureConnection) {
-    
+
+    // 現在のフレームを保存（ストリーミング用）
+    if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
+      self.currentPixelBuffer = pixelBuffer
+    }
+
     // 軽負荷のため 30fps相当で間引き（必要に応じて調整）
     let now = CFAbsoluteTimeGetCurrent()
     if now - lastRequestTime < (1.0 / 30.0) { return }
     lastRequestTime = now
-    
+
     guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-    
+
     let request = VNDetectFaceRectanglesRequest { [weak self] req, _ in
       guard let self = self else { return }
       let boxes: [CGRect] = (req.results as? [VNFaceObservation])?.map { $0.boundingBox } ?? []
@@ -276,10 +413,21 @@ final class CameraController: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         self.onFacesDetected?(boxes)
       }
     }
-    
+
     let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .right, options: [:])
     // 背面カメラの場合は .right を使用
     try? handler.perform([request])
+  }
+
+  // ストリーミング用のフレームキャプチャ
+  func captureCurrentFrameForStreaming() -> UIImage? {
+    guard let pixelBuffer = currentPixelBuffer else { return nil }
+
+    let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+    let context = CIContext()
+    guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { return nil }
+
+    return UIImage(cgImage: cgImage)
   }
 }
 

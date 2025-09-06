@@ -13,24 +13,122 @@ import Vision
 struct ContentView: View {
   @State private var permissionDenied = false
   @State private var faceRects: [CGRect] = [] // 0..1 正規化座標（VisionのboundingBox）
+  @State private var imageScale: Double = 5.0 // 画像のスケール値
+  @State private var showScaleControl = true // スケールコントロールの表示/非表示
   private let camera = CameraController()
+  
+  // 差し込む画像の名前（Assets.xcassetsに追加してください）
+  private let overlayImageName = "overlay_image" // この名前を実際の画像名に変更してください
   
   var body: some View {
     ZStack {
       CameraPreview(session: camera.session)
         .ignoresSafeArea()
       
-      // 検出枠をオーバーレイ
+      // 検出枠に画像をオーバーレイ
       GeometryReader { geo in
         ForEach(faceRects.indices, id: \.self) { idx in
           let rect = convert(rect: faceRects[idx], in: geo.size)
-          RoundedRectangle(cornerRadius: 6)
-            .stroke(lineWidth: 3)
-            .frame(width: rect.width, height: rect.height)
+          
+          // スケールを適用した画像サイズ
+          let scaledWidth = rect.width * imageScale
+          let scaledHeight = rect.height * imageScale
+          
+          // 画像を表示（システムアイコンまたはカスタム画像）
+          // カスタム画像を使う場合
+          Image(overlayImageName)
+            .resizable()
+            .scaledToFit()
+            .frame(width: scaledWidth, height: scaledHeight)
             .position(x: rect.midX, y: rect.midY)
+          
+          // またはシステムアイコンを使う場合（テスト用）
+          // Image(systemName: "face.smiling.fill")
+          //   .resizable()
+          //   .scaledToFit()
+          //   .foregroundColor(.yellow.opacity(0.7))
+          //   .frame(width: scaledWidth, height: scaledHeight)
+          //   .position(x: rect.midX, y: rect.midY)
+          
+          // 枠線も表示したい場合はコメントアウトを解除
+          // RoundedRectangle(cornerRadius: 6)
+          //   .stroke(Color.blue, lineWidth: 2)
+          //   .frame(width: rect.width, height: rect.height)
+          //   .position(x: rect.midX, y: rect.midY)
         }
       }
       .allowsHitTesting(false)
+      
+      // スケール調整コントロール
+      if showScaleControl {
+        VStack {
+          Spacer()
+          VStack(spacing: 10) {
+            HStack {
+              Text("画像スケール: \(String(format: "%.1fx", imageScale))")
+                .foregroundColor(.white)
+                .font(.caption)
+                .padding(.horizontal)
+              
+              Button(action: {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                  showScaleControl.toggle()
+                }
+              }) {
+                Image(systemName: "chevron.down.circle.fill")
+                  .foregroundColor(.white.opacity(0.8))
+              }
+            }
+            
+            HStack {
+              Image(systemName: "minus.magnifyingglass")
+                .foregroundColor(.white.opacity(0.7))
+              
+              Slider(value: $imageScale, in: 0.5...3.0, step: 0.1)
+                .accentColor(.white)
+                .frame(width: 200)
+              
+              Image(systemName: "plus.magnifyingglass")
+                .foregroundColor(.white.opacity(0.7))
+            }
+            
+            HStack(spacing: 20) {
+              Button("0.5x") { withAnimation { imageScale = 0.5 } }
+              Button("1.0x") { withAnimation { imageScale = 1.0 } }
+              Button("1.5x") { withAnimation { imageScale = 1.5 } }
+              Button("2.0x") { withAnimation { imageScale = 2.0 } }
+            }
+            .font(.caption)
+            .foregroundColor(.white)
+          }
+          .padding()
+          .background(Color.black.opacity(0.7))
+          .cornerRadius(15)
+          .padding(.bottom, 30)
+        }
+      } else {
+        // 最小化されたボタン
+        VStack {
+          Spacer()
+          HStack {
+            Spacer()
+            Button(action: {
+              withAnimation(.easeInOut(duration: 0.2)) {
+                showScaleControl.toggle()
+              }
+            }) {
+              Image(systemName: "slider.horizontal.3")
+                .font(.title2)
+                .foregroundColor(.white)
+                .padding(12)
+                .background(Color.black.opacity(0.7))
+                .clipShape(Circle())
+            }
+            .padding(.trailing, 20)
+            .padding(.bottom, 30)
+          }
+        }
+      }
       
       if permissionDenied {
         Color.black.opacity(0.6).ignoresSafeArea()
@@ -63,34 +161,6 @@ struct ContentView: View {
     }
   }
   
-  //  /// Visionの正規化座標（左下原点）→ 画面座標（左上原点）に変換
-  //  private func convert(rect: CGRect, in size: CGSize) -> CGRect {
-  //    // フロントカメラのミラーリングを考慮してX座標を左右反転
-  //    let x = (1 - rect.origin.x - rect.size.width) * size.width
-  //    // Y座標：Visionの左下原点を画面の左上原点に変換
-  //    let y = (-0.35 + rect.origin.y + rect.size.height) * size.height
-  //    let w = rect.size.width * size.width
-  //    let h = rect.size.height * size.height
-  //    print(x,y)
-  //    return CGRect(x: y, y: x, width: w, height: h)
-  //  }
-  //  private func convert(rect: CGRect, in size: CGSize) -> CGRect {
-  //    let W = size.width
-  //    let H = size.height
-  //
-  //    // 正規化座標系 (0..1) の rect を、90°時計回りに回転させてからスケーリング
-  //    let nx = rect.origin.y
-  //    let ny = 1 - rect.origin.x - rect.size.width
-  //    let nw = rect.size.height
-  //    let nh = rect.size.width
-  //
-  //    let x = nx * W
-  //    let y = ny * H
-  //    let w = nw * W
-  //    let h = nh * H
-  //
-  //    return CGRect(x: x, y: y, width: w, height: h)
-  //  }
   private func convert(rect: CGRect, in size: CGSize) -> CGRect {
     let W = size.width, H = size.height
     
@@ -105,11 +175,6 @@ struct ContentView: View {
     
     return CGRect(x: mx * W, y: ry * H, width: rw * W, height: rh * H)
   }
-  
-  
-  
-  
-  
 }
 
 // MARK: - Camera Preview (SwiftUI <-> AVCaptureVideoPreviewLayer)
@@ -159,7 +224,7 @@ final class CameraController: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     session.beginConfiguration()
     session.sessionPreset = .high
     
-    // Front camera
+    // Back camera (背面カメラ)
     let discovery = AVCaptureDevice.DiscoverySession(
       deviceTypes: [.builtInWideAngleCamera],
       mediaType: .video,
@@ -197,7 +262,7 @@ final class CameraController: NSObject, AVCaptureVideoDataOutputSampleBufferDele
                      didOutput sampleBuffer: CMSampleBuffer,
                      from connection: AVCaptureConnection) {
     
-    // 軽負荷のため 15fps相当で間引き（必要に応じて調整）
+    // 軽負荷のため 30fps相当で間引き（必要に応じて調整）
     let now = CFAbsoluteTimeGetCurrent()
     if now - lastRequestTime < (1.0 / 30.0) { return }
     lastRequestTime = now
@@ -213,11 +278,10 @@ final class CameraController: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     }
     
     let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .right, options: [:])
-    // フロントカメラ映像は左右反転考慮（.leftMirrored）。背面なら .right を想定。
+    // 背面カメラの場合は .right を使用
     try? handler.perform([request])
   }
 }
-
 
 #Preview {
   ContentView()

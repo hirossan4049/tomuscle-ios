@@ -146,6 +146,7 @@ struct CameraView: View {
       }
     }
     .onAppear {
+      Task {await startEncouragementTimer()}
       AVCaptureDevice.requestAccess(for: .video) { granted in
         DispatchQueue.main.async {
           permissionDenied = !granted

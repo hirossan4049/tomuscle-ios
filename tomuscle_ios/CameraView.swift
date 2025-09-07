@@ -259,7 +259,7 @@ final class CameraController: NSObject, AVCaptureVideoDataOutputSampleBufferDele
                      from connection: AVCaptureConnection) {
     
     let now = CFAbsoluteTimeGetCurrent()
-    if now - lastRequestTime < (1.0 / 30.0) { return }
+    if now - lastRequestTime < (1.0 / 60.0) { return }
     lastRequestTime = now
     
     guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
